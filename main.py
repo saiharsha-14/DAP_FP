@@ -10,15 +10,17 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger()
  
 @op(out=Out(bool))
-def extract_and_store_data_in_mongodb(context) -> bool:
+def extract_and_store_json_data_in_mongodb(context) -> bool: 
     result = False
     mongo_connection_string = "mongodb://mydap:mydapnci7@localhost:27017/myDatabase?authSource=admin"
     client = pymongo.MongoClient(mongo_connection_string)
-    db = client["DapDatabase"]
-    collection = db['traffic_crashes']
- 
+    db = client["TrafficIncidentsDB"]
+    collection = db['traffic_crash_events']
+    # Indexing is created for crash_record_id for quicker access
+    collection.create_index([('crash_record_id', pymongo.ASCENDING)], unique=False)
+
     file_path = "D:\\traff_pep_dataset.json"  # Use double backslashes for Windows paths
- 
+
     try:
         # Load JSON data from file
         with open(file_path, 'r') as file:
@@ -51,25 +53,23 @@ def extract_and_store_data_in_mongodb(context) -> bool:
     return result
 
 @op(out=Out(bool))
-def ingest_csv_to_mongodb(context) -> bool:
+def ingest_csv_data_to_mongodb(context) -> bool:
     mongo_connection_string = "mongodb://mydap:mydapnci7@localhost:27017/myDatabase?authSource=admin"
     client = pymongo.MongoClient(mongo_connection_string)
-    db = client["DapDatabase"]
-    collection = db['traff_crash_pep']
-
+    db = client["TrafficIncidentsDB"]
+    collection = db['crash_victims']
+    #Indexing is created for CRASH_RECORD_ID for quicker access
+    collection.create_index([('CRASH_RECORD_ID', pymongo.ASCENDING)], unique=False)
     file_path = "D:\\Traffic_Crashes_-_People.csv"  # Use double backslashes for Windows paths
 
     try:
         # Read CSV data using pandas
         data_df = pd.read_csv(file_path)
-
         # Convert DataFrame to dictionary records for MongoDB insertion
         data_records = data_df.to_dict('records')
-
         # Insert data into MongoDB, use pandas to handle potential duplicate keys elegantly
         result = collection.insert_many(data_records, ordered=False)
         context.log.info(f"Inserted {len(result.inserted_ids)} records successfully into MongoDB.")
-
         return True
 
     except pymongo.errors.BulkWriteError as bwe:
