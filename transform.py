@@ -220,10 +220,8 @@ def load(merged_df):
         logger.error("Error: %s" % error)
         return False
     
-# @op(ins={"start1": In(bool), "start2": In(bool)}, out=Out(bool))
-# def transform_and_load(start1: bool, start2: bool):
-@op( out=Out(bool))
-def transform_and_load():
+@op(ins={"start1": In(bool), "start2": In(bool)}, out=Out(bool))
+def transform_and_load(start1: bool, start2: bool):
     # Extract and transform traffic_crash_events data
     traffic_crash_events_data = transform_traffic_crash_events_data()
     # Extract and transform crash_victims data

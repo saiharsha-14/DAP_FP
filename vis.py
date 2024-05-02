@@ -13,6 +13,8 @@ from bokeh.palettes import Category20
 from bokeh.layouts import gridplot
 import plotly.express as px
 import yaml
+import plotly.graph_objects as go
+
 
 def load_config():
     with open('config.yaml', 'r') as file:
@@ -22,14 +24,11 @@ config = load_config()
 
 # Connection string to PostgreSQL database
 postgres_connection_string = config['connection']['postgres_connection_string']
-# Connection string to the mongodb
-mongo_connection_string = config['connection']['mongo_connection_string']
 
 @op(
     ins={"start": In(bool)}
 )
 
-# Visualization of the impact of time of day on crash outcomes
 @op
 def visualize_time_of_day_impact(start: bool):
     query_string = """
@@ -41,23 +40,25 @@ def visualize_time_of_day_impact(start: bool):
     engine = create_engine(postgres_connection_string)
     try:
         with engine.connect() as connection:
-            df = sqlio.read_sql_query(text(query_string), connection)
+            df = sqlio.read_sql_query(query_string, connection)
 
-        # Plotting
-        p = figure(title="Impact of Time of Day on Crash Outcomes", x_axis_label='Hour of the Day', y_axis_label='Number of Crashes')
-        p.vbar(x=df['crash_hour'], top=df['num_crashes'], width=0.9)
-        show(p)
+        fig = px.bar(df, x='crash_hour', y='num_crashes', title='Impact of Time of Day on Crash Outcomes', 
+                     labels={'crash_hour': 'Hour of the Day', 'num_crashes': 'Number of Crashes'})
+        fig.show()
+
     finally:
         engine.dispose()
 
-# Visualization of the impact of age and gender on injury severity
+
 @op
 def visualize_age_gender_impact(start: bool):
     # SQL query to fetch data
     query_string = """
     SELECT COALESCE("AGE", -1) AS "AGE", "SEX", "INJURY_CLASSIFICATION", COUNT(*) as cases
     FROM traffic_incidents_table
-    WHERE "INJURY_CLASSIFICATION" IS NOT NULL AND "SEX" IN ('M', 'F')
+    WHERE "INJURY_CLASSIFICATION" IS NOT NULL 
+    AND "SEX" IN ('M', 'F')
+    AND "AGE" != -1
     GROUP BY COALESCE("AGE", -1), "SEX", "INJURY_CLASSIFICATION"
     ORDER BY COALESCE("AGE", -1), "SEX";
     """
@@ -65,15 +66,14 @@ def visualize_age_gender_impact(start: bool):
     try:
         with engine.connect() as connection:
             df = pd.read_sql(query_string, connection)
-
-        # Convert AGE to string to ensure compatibility with FactorRange
+    
         df['AGE'] = df['AGE'].astype(str)
-        
-        # Output to static HTML file
         output_file("age_gender_impact.html")
+
         # Filter DataFrame for 'M' and 'F' genders
-        df_m = df[df['SEX'] == 'M']
-        df_f = df[df['SEX'] == 'F']
+        df_m = df[(df['SEX'] == 'M')]
+        df_f = df[(df['SEX'] == 'F')]
+
         # Create separate plots for each gender
         create_plot(df_m, 'M', 'blue')
         create_plot(df_f, 'F', 'pink')
@@ -121,32 +121,15 @@ def visualize_safety_measures_effectiveness(start: bool):
     ORDER BY "SAFETY_EQUIPMENT", "AIRBAG_DEPLOYED";
     """
     engine = create_engine(postgres_connection_string)
-    try:
-        with engine.connect() as connection:
-            df = sqlio.read_sql_query(query_string, connection)
+    with engine.connect() as connection:
+        df = sqlio.read_sql_query(query_string, connection)
 
-        output_file("safety_measures_effectiveness.html")
-
-        # Configure the source for Bokeh
-        source = ColumnDataSource(df)
-
-        # Create a color mapper for injury classification
-        color_mapper = factor_cmap('INJURY_CLASSIFICATION', palette=['green', 'yellow', 'orange', 'red', 'black'], factors=df['INJURY_CLASSIFICATION'].unique())
-
-        # Initialize the figure
-        p = figure(title="Effectiveness of Safety Measures on Injury Severity", x_range=df['SAFETY_EQUIPMENT'].unique(), 
-                   y_axis_label='Cases', height=400, width=700, tooltips=[("Cases", "@cases")])
-
-        # Add vertical bars to the plot
-        p.vbar(x='SAFETY_EQUIPMENT', top='cases', width=0.9, source=source, line_color='white', fill_color=color_mapper)
-
-        # Customize plot aesthetics
-        p.xaxis.major_label_orientation = 1.2  # Rotate labels for better legibility
-        p.xgrid.grid_line_color = None
-
-        show(p)  # Show the plot in the browser
-    finally:
-        engine.dispose()
+    # Plotting using Plotly
+    fig = px.bar(df, x='SAFETY_EQUIPMENT', y='cases', color='AIRBAG_DEPLOYED',
+                 title='Effectiveness of Safety Measures on Injury Severity',
+                 labels={'SAFETY_EQUIPMENT': 'Safety Equipment', 'cases': 'Cases', 'AIRBAG_DEPLOYED': 'Airbag Deployed'})
+    fig.show()
+    engine.dispose()
 
 @op
 def visualize_environmental_impact(start: bool):
@@ -161,67 +144,42 @@ def visualize_environmental_impact(start: bool):
         with engine.connect() as connection:
             df = sqlio.read_sql_query(query_string, connection)
 
-        output_file("environmental_impact_on_crashes.html")
-
-        # Creating data sources for the plots
-        source = ColumnDataSource(df)
-
-        # Weather Condition Impact Plot
-        p1 = figure(title="Impact of Weather Conditions on Crash Frequency", x_range=df['weather_condition'].unique(),
-                    x_axis_label='Weather Condition', y_axis_label='Number of Crashes', width=450, height=400)
-        p1.vbar(x='weather_condition', top='num_crashes', width=0.9, source=source, color=factor_cmap('weather_condition', palette='Viridis256', factors=df['weather_condition'].unique()))
-
-        # Lighting Condition Impact Plot
-        p2 = figure(title="Impact of Lighting Conditions on Crash Frequency", x_range=df['lighting_condition'].unique(),
-                    x_axis_label='Lighting Condition', y_axis_label='Number of Crashes', width=450, height=400)
-        p2.vbar(x='lighting_condition', top='num_crashes', width=0.9, source=source, color=factor_cmap('lighting_condition', palette='Magma256', factors=df['lighting_condition'].unique()))
-
-        # Customize plot aesthetics
-        p1.xaxis.major_label_orientation = 1.2  # Rotate labels for better legibility
-        p1.xgrid.grid_line_color = None
-        # Customize plot aesthetics
-        p2.xaxis.major_label_orientation = 1.2  # Rotate labels for better legibility
-        p2.xgrid.grid_line_color = None
-        # Show plots in a grid layout
-        p = gridplot([[p1, p2]])
-        show(p)
+        fig = px.bar(df, x='weather_condition', y='num_crashes', color='lighting_condition', 
+                     title='Impact of Weather and Lighting Conditions on Crash Frequency', 
+                     labels={'weather_condition': 'Weather Condition', 'num_crashes': 'Number of Crashes', 
+                             'lighting_condition': 'Lighting Condition'})
+        fig.show()
 
     finally:
         engine.dispose()
 
 @op
 def visualize_crash_causes(start: bool):
-    # Establish a database connection
     engine = create_engine(postgres_connection_string)
     try:
+        query = """
+        SELECT prim_contributory_cause, "DRIVER_ACTION", "PHYSICAL_CONDITION", COUNT(*) AS num_cases
+        FROM traffic_incidents_table
+        GROUP BY prim_contributory_cause, "DRIVER_ACTION", "PHYSICAL_CONDITION"
+        ORDER BY prim_contributory_cause, "DRIVER_ACTION", "PHYSICAL_CONDITION";
+        """
         with engine.connect() as connection:
-        # Define the SQL query to fetch data
-            query = """
-            SELECT prim_contributory_cause, "DRIVER_ACTION", "PHYSICAL_CONDITION", COUNT(*) AS num_cases
-            FROM traffic_incidents_table
-            GROUP BY prim_contributory_cause, "DRIVER_ACTION", "PHYSICAL_CONDITION"
-            ORDER BY prim_contributory_cause, "DRIVER_ACTION", "PHYSICAL_CONDITION";
-            """
-            
-            # Execute the query and load data into a DataFrame
             df = pd.read_sql_query(query, engine)                
-            # Plotting the primary contributory causes
-            plt.figure(figsize=(10, 8))
             cause_counts = df['prim_contributory_cause'].value_counts()
-            sns.barplot(x=cause_counts.values, y=cause_counts.index, palette='viridis')
-            plt.title('Frequency of Primary Contributory Causes')
-            plt.xlabel('Number of Cases')
-            plt.ylabel('Primary Contributory Cause')
-            plt.show()
 
-            # Heatmap of Driver Action and Physical Condition by Primary Cause
-            pivot_table = df.pivot_table(index='DRIVER_ACTION', columns='PHYSICAL_CONDITION', values='num_cases', aggfunc='sum', fill_value=0)
-            plt.figure(figsize=(12, 10))
-            sns.heatmap(pivot_table, annot=True, fmt="d", cmap='viridis')
-            plt.title('Driver Actions and Physical Conditions by Primary Cause')
-            plt.xlabel('Physical Condition')
-            plt.ylabel('Driver Action')
-            plt.show()
+        fig1 = px.bar(y=cause_counts.index, x=cause_counts.values, orientation='h', 
+                      title='Frequency of Primary Contributory Causes', 
+                      labels={'x': 'Number of Cases', 'y': 'Primary Contributory Cause'})
+
+        pivot_table = df.pivot_table(index='DRIVER_ACTION', columns='PHYSICAL_CONDITION', 
+                                     values='num_cases', aggfunc='sum', fill_value=0)
+        fig2 = go.Figure(data=go.Heatmap(z=pivot_table.values, x=pivot_table.columns, y=pivot_table.index, 
+                                          colorscale='viridis'))
+        fig2.update_layout(title='Driver Actions and Physical Conditions by Primary Cause', 
+                           xaxis_title='Physical Condition', yaxis_title='Driver Action')
+
+        fig1.show()
+        fig2.show()
 
     finally:
        engine.dispose()
@@ -229,30 +187,23 @@ def visualize_crash_causes(start: bool):
 @op
 def visualize_cell_phone_impact(start: bool):
     engine = create_engine(postgres_connection_string)
-    query = """
-    SELECT "CELL_PHONE_USE", COUNT(*) AS num_cases
-    FROM traffic_incidents_table
-    GROUP BY "CELL_PHONE_USE"
-    ORDER BY "CELL_PHONE_USE";
-    """
-    df = pd.read_sql_query(query, engine)
-    output_file("cell_phone_impact.html")
+    try:
+        query = """
+        SELECT "CELL_PHONE_USE", COUNT(*) AS num_cases
+        FROM traffic_incidents_table
+        GROUP BY "CELL_PHONE_USE"
+        ORDER BY "CELL_PHONE_USE";
+        """
+        df = pd.read_sql_query(query, engine)
+        df['CELL_PHONE_USE'] = df['CELL_PHONE_USE'].fillna('Unknown')
 
-    # Handling NaN values and replacing them with 'Unknown'
-    df['CELL_PHONE_USE'] = df['CELL_PHONE_USE'].fillna('Unknown')
+        fig = px.bar(df, x='CELL_PHONE_USE', y='num_cases', 
+                     title='Impact of Cell Phone Use on Crash Involvement', 
+                     labels={'CELL_PHONE_USE': 'Cell Phone Use', 'num_cases': 'Number of Cases'})
+        fig.show()
 
-    source = ColumnDataSource(df)
-
-    p = figure(x_range=df['CELL_PHONE_USE'].unique(), title="Impact of Cell Phone Use on Crash Involvement",
-               toolbar_location=None, tools="", height=400)
-    p.vbar(x='CELL_PHONE_USE', top='num_cases', width=0.9, source=source,
-           line_color='white', fill_color=factor_cmap('CELL_PHONE_USE', palette=['blue', 'green', 'gray'], factors=df['CELL_PHONE_USE'].unique()))
-    
-    p.xaxis.major_label_orientation = 1.0
-    p.xgrid.grid_line_color = None
-
-    show(p)
-    engine.dispose()
+    finally:
+        engine.dispose()
 
 @op
 def visualize_geographic_patterns(start: bool):
@@ -269,8 +220,9 @@ def visualize_geographic_patterns(start: bool):
             print("No data found.")
             return
 
-        # Interactive map with Plotly
-        fig = px.scatter_geo(df, lat='latitude', lon='longitude', hover_name='location', projection='natural earth')
+        fig = px.scatter_geo(df, lat='latitude', lon='longitude', hover_name='location', 
+                             title='Geographic Patterns of Traffic Incidents', 
+                             projection='natural earth')
         fig.show()
 
     finally:

@@ -6,11 +6,12 @@ from vis import *
 @job
 def dagster_etl_pipeline():
     # Start extraction process
-    # traffic_crash_events_data = extract_and_store_json_data_in_mongodb()
-    # crash_victims_data = ingest_csv_data_to_mongodb()
+    traffic_crash_events_data = extract_and_store_json_data_in_mongodb()
+    crash_victims_data = ingest_csv_data_to_mongodb()
 
-    # loaded_data = transform_and_load(traffic_crash_events_data, crash_victims_data)
-    loaded_data = transform_and_load()
+    # transform the unstructed data and load into PostgreSQL
+    loaded_data = transform_and_load(traffic_crash_events_data, crash_victims_data)
+    
     #visualise all the 7 research questions
     visualize_time_of_day_impact(loaded_data)
     visualize_age_gender_impact(loaded_data)
