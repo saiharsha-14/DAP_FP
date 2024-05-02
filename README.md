@@ -28,3 +28,6 @@ The Python-based data analytics project intends to help transfer the management 
    ```bash
    git clone https://github.com/saiharsha-14/DAP_FP.git
    cd DAP_FP
+
+#### run the dagster
+In our project, Dagster is the key role for our ETL processes, facilitating a fully automated pipeline that streamlines every step from data acquisition to storage. Dagster seamlessly manages the ingestion of data. It further automates the extraction, transformation, and loading (ETL) phases, ensuring that the processed data is efficiently transferred into our PostgreSQL database. This robust automation allows the entire data workflow to be controlled by a single command: dagit -f repository.py, making the process both efficient and user-friendly. This setup not only saves time but also enhances the reliability and reproducibility of our data analysis pipeline.
