@@ -1,0 +1,8 @@
+connection:
+  #"postgresql://username:password@localhost:5432/postgres"
+  default_admin_connection_string: "postgresql://mydapsh:mydapnci7@localhost:5432/postgres"
+  #change the database_name like "postgresql://mydapsh:mydapnci7@localhost:5432/database_name
+  postgres_connection_string: "postgresql://mydapsh:mydapnci7@localhost:5432/traffincidentsdb"
+  #"mongodb://username:password@localhost:27017/myDatabase?authSource=admin"
+  mongo_connection_string: "mongodb://mydap:mydapnci7@localhost:27017/myDatabase?authSource=admin"
+  database_name: "traffincidentsdb"

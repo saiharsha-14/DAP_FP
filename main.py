@@ -1,18 +1,28 @@
 import json
 import logging
 import pymongo
+import csv
+from datetime import datetime
 from dagster import op, Out
 from pymongo import errors
 import pandas as pd
+import yaml
 
 # Set up a basic logger
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger()
+
+def load_config():
+    with open('config.yaml', 'r') as file:
+        return yaml.safe_load(file)
+
+config = load_config()
+# Connection string to the mongodb
+mongo_connection_string = config['connection']['mongo_connection_string']
  
 @op(out=Out(bool))
-def extract_and_store_json_data_in_mongodb(context) -> bool: 
+def extract_and_store_json_data_in_mongodb() -> bool: 
     result = False
-    mongo_connection_string = "mongodb://mydap:mydapnci7@localhost:27017/myDatabase?authSource=admin"
     client = pymongo.MongoClient(mongo_connection_string)
     db = client["TrafficIncidentsDB"]
     collection = db['traffic_crash_events']
@@ -43,40 +53,44 @@ def extract_and_store_json_data_in_mongodb(context) -> bool:
                 logger.error("Duplicate Key Error: %s" % dke)
                 continue
  
-        context.log.info("Data successfully loaded and inserted into MongoDB.")
+        logger.info("Data successfully loaded and inserted into MongoDB.")
         result = True
  
     except Exception as e:
-        context.log.error("An error occurred: {}".format(e))
+        logger.error("An error occurred: {}".format(e))
         result = False
  
     return result
 
 @op(out=Out(bool))
-def ingest_csv_data_to_mongodb(context) -> bool:
-    mongo_connection_string = "mongodb://mydap:mydapnci7@localhost:27017/myDatabase?authSource=admin"
+def ingest_csv_data_to_mongodb() -> bool:
     client = pymongo.MongoClient(mongo_connection_string)
     db = client["TrafficIncidentsDB"]
     collection = db['crash_victims']
     #Indexing is created for CRASH_RECORD_ID for quicker access
     collection.create_index([('CRASH_RECORD_ID', pymongo.ASCENDING)], unique=False)
     file_path = "D:\\Traffic_Crashes_-_People.csv"  # Use double backslashes for Windows paths
-
+    
     try:
-        # Read CSV data using pandas
-        data_df = pd.read_csv(file_path)
-        # Convert DataFrame to dictionary records for MongoDB insertion
-        data_records = data_df.to_dict('records')
-        # Insert data into MongoDB, use pandas to handle potential duplicate keys elegantly
-        result = collection.insert_many(data_records, ordered=False)
-        context.log.info(f"Inserted {len(result.inserted_ids)} records successfully into MongoDB.")
+        with open(file_path, 'r') as csv_file:
+            reader = csv.DictReader(csv_file)
+            all_data = []
+
+            for row in reader:
+                # Parse CRASH_DATE and DATE_POLICE_NOTIFIED to datetime objects
+                if 'CRASH_DATE' in row:
+                    row['CRASH_DATE'] = datetime.strptime(row['CRASH_DATE'], '%m/%d/%Y %I:%M:%S %p')
+        
+                all_data.append(row)
+            collection.insert_many(all_data)
+        logger.info("CSV data successfully loaded and inserted into MongoDB.")
         return True
 
     except pymongo.errors.BulkWriteError as bwe:
-        context.log.error("Bulk write error occurred due to duplicate keys or other issues.")
-        context.log.error(bwe.details)
+        logger.error("Bulk write error occurred due to duplicate keys or other issues.")
+        logger.error(bwe.details)
         return False
 
     except Exception as e:
-        context.log.error(f"An error occurred: {e}")
+        logger.error(f"An error occurred: {e}")
         return False
