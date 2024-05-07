@@ -42,4 +42,5 @@ Note : - Install all the libraries mention in pre.txt with "pip install -r pre.t
 In our project, Dagster is the key role for our ETL processes, facilitating a fully automated pipeline that streamlines every step from data acquisition to storage. Dagster seamlessly manages the ingestion of data. It further automates the extraction, transformation, and loading (ETL) phases, ensuring that the processed data is efficiently transferred into our PostgreSQL database. This robust automation allows the entire data workflow to be controlled by a single command in python virtual environment which we added below,  making the process both efficient and user-friendly. This setup not only saves time but also enhances the reliability and reproducibility of our data analysis pipeline.
 
 ```bash
+pip install -r pre.txt
 dagit -f respository.py  
